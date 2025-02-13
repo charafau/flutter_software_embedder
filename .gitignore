@@ -1,0 +1,4 @@
+.DS_Store
+build/
+hello_world/build/
+.metadata
