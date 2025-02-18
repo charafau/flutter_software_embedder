@@ -20,83 +20,20 @@
 // terminal mouse
 
 // This value is calculated after the window is created.
-static double g_pixelRatio = 1.0f;
+static double g_pixelRatio = 2.0f;
 // Initial window width
-static const size_t kInitialWindowWidth = 800;
+static const size_t kInitialWindowWidth = 1280;
 // Initial window height
-static const size_t kInitialWindowHeight = 600;
+static const size_t kInitialWindowHeight = 800;
 // Flutter View Id
 static constexpr FlutterViewId kImplicitViewId = 0;
+#define ESC '\033'
 
 int frameNo = 0;
 
 FlutterEngine engine = nullptr;
 
-sixel_output_t *output;
-sixel_dither_t *dither;
-
-// bool SaveAsBMP(const char *filename, const void *buffer, int width, int height, int row_bytes)
-// {
-//   FILE *file = fopen(filename, "wb");
-//   if (!file)
-//   {
-//     fprintf(stderr, "Failed to open file: %s\n", filename);
-//     return false;
-//   }
-
-//   // BMP Header
-//   uint8_t header[54] = {
-//       0x42, 0x4D,       // Signature "BM"
-//       0, 0, 0, 0,       // File size (to be filled later)
-//       0, 0,             // Reserved
-//       0, 0,             // Reserved
-//       54, 0, 0, 0,      // Offset to pixel data
-//       40, 0, 0, 0,      // Header size (40 bytes for BITMAPINFOHEADER)
-//       0, 0, 0, 0,       // Width (to be filled later)
-//       0, 0, 0, 0,       // Height (to be filled later)
-//       1, 0,             // Planes (must be 1)
-//       32, 0,            // Bits per pixel (32-bit for ARGB)
-//       0, 0, 0, 0,       // Compression (0 = none)
-//       0, 0, 0, 0,       // Image size (0 = no compression)
-//       0x13, 0x0B, 0, 0, // Horizontal resolution (2835 pixels/meter)
-//       0x13, 0x0B, 0, 0, // Vertical resolution (2835 pixels/meter)
-//       0, 0, 0, 0,       // Colors in color table (0 = default)
-//       0, 0, 0, 0        // Important color count (0 = all)
-//   };
-
-//   // Fill in file size
-//   int file_size = 54 + (height * row_bytes);
-//   header[2] = file_size & 0xFF;
-//   header[3] = (file_size >> 8) & 0xFF;
-//   header[4] = (file_size >> 16) & 0xFF;
-//   header[5] = (file_size >> 24) & 0xFF;
-
-//   // Fill in width and height
-//   header[18] = width & 0xFF;
-//   header[19] = (width >> 8) & 0xFF;
-//   header[20] = (width >> 16) & 0xFF;
-//   header[21] = (width >> 24) & 0xFF;
-
-//   header[22] = height & 0xFF;
-//   header[23] = (height >> 8) & 0xFF;
-//   header[24] = (height >> 16) & 0xFF;
-//   header[25] = (height >> 24) & 0xFF;
-
-//   // Write the header
-//   fwrite(header, sizeof(uint8_t), 54, file);
-
-//   // Write the pixel data (BMP stores pixels bottom-to-top, so reverse rows)
-//   const uint8_t *pixel_data = reinterpret_cast<const uint8_t *>(buffer);
-//   for (int y = height - 1; y >= 0; y--)
-//   {
-//     fwrite(pixel_data + (y * row_bytes), sizeof(uint8_t), row_bytes, file);
-//   }
-
-//   fclose(file);
-//   return true;
-// }
-
-// bool PresentSurface2(void *user_data,
+// bool SaveToPng(void *user_data,
 //                      const void *buffer,
 //                      size_t row_bytes,
 //                      size_t height)
@@ -151,6 +88,11 @@ sixel_dither_t *dither;
 //   }
 // }
 
+static int sixel_write(char *data, int size, void *priv)
+{
+  return fwrite(data, 1, size, (FILE *)priv);
+}
+
 void GetPixelComponents(uint32_t argb, uint8_t *a, uint8_t *r, uint8_t *g, uint8_t *b)
 {
   *a = (argb >> 24) & 0xFF;
@@ -163,41 +105,12 @@ void print_pixels_sixel(const void *allocation, size_t width, size_t height)
 {
   const uint8_t *local_pixels = (const uint8_t *)allocation; // Cast to byte pointer
 
-  // for (size_t y = 0; y < height; y++)
-  // {
-  //   for (size_t x = 0; x < width; x++)
-  //   {
-  // size_t index = (y * width + x) * 4; // Each pixel has 4 bytes (RGBA)
-  // uint8_t r = pixels[index];
-  // uint8_t g = pixels[index + 1];
-  // uint8_t b = pixels[index + 2];
-  // uint8_t a = pixels[index + 3];
+  sixel_output_t *output;
+  sixel_dither_t *dither;
 
-  // // printf("Pixel (%zu, %zu): R=%d, G=%d, B=%d, A=%d\n", x, y, r, g, b, a);
-  // // printf("(R=%d, G=%d, B=%d, A=%d); ", r, g, b, a);
-  // print_colored_text(r, g, b, "█");
-
-  //     pixels[(y * width + x) * 3 + 0] =
-  //     (unsigned char)((x + frame * 4) % 255); // Shifting Red
-  // pixels[(y * width + x) * 3 + 1] =
-  //     (unsigned char)((y + frame * 4) % 255); // Shifting Green
-  // pixels[(y * width + x) * 3 + 2] =
-  //     (unsigned char)((frame * 4) % 255); // Shifting Blue
-
-  //   }
-  //   printf("\n");
-  // }
-
-  // if (x < width && y < height)
-  // {
-  //   // Get pixel at (x,y)
-  //   size_t index = y * width + x;
-  //   uint32_t argb = pixels[index];
-
-  //   // Extract components
-  //   uint8_t a, r, g, b;
-  //   GetPixelComponents(argb, &a, &r, &g, &b);
-  // }
+  sixel_output_new(&output, sixel_write, stdout, NULL);
+  dither = sixel_dither_get(SIXEL_BUILTIN_XTERM256);
+  sixel_dither_set_pixelformat(dither, SIXEL_PIXELFORMAT_ARGB8888);
 
   // good first frame
   unsigned char *pixels;
@@ -208,20 +121,6 @@ void print_pixels_sixel(const void *allocation, size_t width, size_t height)
     for (int x = 0; x < width; x++)
     {
       size_t index = (y * width + x) * 4;
-      // pixels[(y * width + x) * 4 + 1] =
-      //     (unsigned char)(local_pixels[index] % 255); // Shifting Red
-      // pixels[(y * width + x) * 4 + 2] =
-      //     (unsigned char)(local_pixels[index + 1] % 255); // Shifting Green
-      // pixels[(y * width + x) * 4 + 3] =
-      //     (unsigned char)(local_pixels[index + 2] % 255); // Shifting Blue
-      // pixels[(y * width + x) * 4 + 0] =
-      //     (unsigned char)(local_pixels[index + 3] % 255); // Shifting alpha
-
-      // uint32_t argb = local_pixels[index];
-
-      // Extract components
-      // uint8_t a, r, g, b;
-      // GetPixelComponents(argb, &a, &r, &g, &b);
       uint8_t r = local_pixels[index];
       uint8_t g = local_pixels[index + 1];
       uint8_t b = local_pixels[index + 2];
@@ -233,14 +132,14 @@ void print_pixels_sixel(const void *allocation, size_t width, size_t height)
       pixels[(y * width + x) * 4 + 3] = b;
     }
   }
-
-  // const uint32_t *pixels = static_cast<const uint32_t *>(allocation);
-  // size_t width = row_bytes / 4; // 4 bytes per pixel in ARGB
-
   printf("\033[H");
+
   sixel_encode(pixels, width, height, 0, dither, output);
   fflush(stdout);
   free(pixels);
+
+  sixel_dither_unref(dither);
+  sixel_output_unref(output);
 }
 
 bool PresentSurface(void *user_data,
@@ -248,39 +147,13 @@ bool PresentSurface(void *user_data,
                     size_t row_bytes,
                     size_t height)
 {
-  // Copy or display the buffer.
-  // memcpy(display_buffer, buffer->allocation, buffer->height * buffer->row_bytes);
-
-  // std::string fileName = std::format("pics/oout{0}.png", frameNo);
   const uint32_t *pixels = static_cast<const uint32_t *>(allocation);
   size_t width = row_bytes / 4; // 4 bytes per pixel in ARGB
 
   size_t x = 100; // example x coordinate
   size_t y = 100;
 
-  // if (x < width && y < height)
-  // {
-  //   // Get pixel at (x,y)
-  //   size_t index = y * width + x;
-  //   uint32_t argb = pixels[index];
-
-  //   // Extract components
-  //   uint8_t a, r, g, b;
-  //   GetPixelComponents(argb, &a, &r, &g, &b);
-  // }
-
   print_pixels_sixel(allocation, width, height);
-
-  // if (stbi_write_png(fileName.c_str(), kInitialWindowWidth, height, 4, allocation, kInitialWindowWidth * 4))
-  // {
-  //   std::cout << "Saved: " << fileName << std::endl;
-  // }
-  // else
-  // {
-  //   std::cerr << "Failed to save PNG" << std::endl;
-  // }
-
-  // frameNo += 1;
 
   return true;
 }
@@ -290,19 +163,6 @@ bool PresentSurface(void *user_data,
  */
 void windowSizeCallback(FlutterEngine &engine, int width, int height)
 {
-  FlutterWindowMetricsEvent event = {};
-  // event.struct_size = sizeof(event);
-  // // Real pixel count
-  // event.width = width * g_pixelRatio;
-  // event.height = height * g_pixelRatio;
-  // event.pixel_ratio = g_pixelRatio;
-  // // This example only supports a single window, therefore we assume the event
-  // // occurred in the only view, the implicit view.
-  // // you might have many flutter views.
-  // event.view_id = kImplicitViewId;
-  // FlutterEngineSendWindowMetricsEvent(
-  //     engine,
-  //     &event);
 
   FlutterWindowMetricsEvent metrics_event = {};
   metrics_event.struct_size = sizeof(FlutterWindowMetricsEvent);
@@ -312,13 +172,6 @@ void windowSizeCallback(FlutterEngine &engine, int width, int height)
   FlutterEngineSendWindowMetricsEvent(engine, &metrics_event);
 }
 
-/**
- * Setups Flutter engine and runs it.
- * returns false on error.
- * GLFWwindow* window - windows pointer
- * const std::string& project_path - path to compiled flutter assets
- * const std::string& icudtl_path - TODO
- */
 bool runFlutter(
     const std::string &project_path,
     const std::string &icudtl_path)
@@ -379,11 +232,6 @@ void updatePointer(FlutterPointerPhase phase, double x, double y)
   FlutterEngineSendPointerEvent(reinterpret_cast<FlutterEngine>(engine), &event, 1);
 }
 
-static int sixel_write(char *data, int size, void *priv)
-{
-  return fwrite(data, 1, size, (FILE *)priv);
-}
-
 // mouse terminal support
 
 struct termios orig_termios;
@@ -429,6 +277,69 @@ int convert_to_pixels(int cell_pos, int cell_size, int image_size)
 
 // end of mouse terminal support
 
+void sendPlatformMessage(const char *channel, const char *message)
+{
+
+  FlutterEngineResult result;
+  FlutterPlatformMessage platformMessage = {0};
+
+  platformMessage.struct_size = sizeof(FlutterPlatformMessage);
+  platformMessage.channel = channel;
+  platformMessage.message = reinterpret_cast<const uint8_t *>(message);
+  platformMessage.message_size = strlen(message);
+
+  printf("sending... with message:\n %s \n\n", message);
+
+  result = FlutterEngineSendPlatformMessage(
+      engine,
+      &platformMessage);
+
+  if (result != kSuccess)
+  {
+    printf("Error sending platform message. FlutterEngineSendPlatformMessage: %s\n", (result));
+  }
+
+  printf("got result from engine FlutterEngineSendPlatformMessage: %s\n", (result));
+  // this is it!
+  // std::unique_ptr<flutter::MethodChannel<std::string>> chan;
+}
+
+void process_mouse_event()
+{
+  char buf[6];
+
+  // Read the remaining bytes of the mouse event
+  if (read(STDIN_FILENO, buf, 3) < 3)
+    return;
+
+  int button = buf[0] - 32;
+  int col = buf[1] - 32;
+  int row = buf[2] - 32;
+
+  if (button == 0)
+  { // Left click
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    // printf("Mouse Click at Char (X=%d, Y=%d)\n", col, row);
+
+    double pixels_per_col = w.ws_xpixel / (double)w.ws_col;
+    double pixels_per_row = w.ws_ypixel / (double)w.ws_row;
+
+    int pixel_x = (int)(col * pixels_per_col);
+    int pixel_y = (int)(row * pixels_per_row);
+
+    updatePointer(FlutterPointerPhase::kDown, pixel_x / g_pixelRatio, pixel_y / g_pixelRatio);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+    updatePointer(FlutterPointerPhase::kUp, pixel_x / g_pixelRatio, pixel_y / g_pixelRatio);
+  }
+}
+
+void process_keyboard_event(char ch)
+{
+  printf("You pressed: %c (ASCII: %d)\n", ch, ch);
+}
+
 int main(int argc, const char *argv[])
 {
   if (argc != 3)
@@ -440,10 +351,6 @@ int main(int argc, const char *argv[])
   std::string project_path = argv[1];
   std::string icudtl_path = argv[2];
 
-  sixel_output_new(&output, sixel_write, stdout, NULL);
-  dither = sixel_dither_get(SIXEL_BUILTIN_XTERM256);
-  sixel_dither_set_pixelformat(dither, SIXEL_PIXELFORMAT_ARGB8888);
-
   bool result = runFlutter(project_path, icudtl_path);
   if (!result)
   {
@@ -452,115 +359,46 @@ int main(int argc, const char *argv[])
   }
   printf("\033[2J\033[H");
 
-  // std::this_thread::sleep_for(std::chrono::milliseconds(500));
-  // updatePointer(FlutterPointerPhase::kDown, 770, 570);
-  // std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-  // updatePointer(FlutterPointerPhase::kUp, 770, 570);
-
-  // mouse support
-
   // Set up signal handling
   signal(SIGINT, handle_signal);
 
-  // Enable raw mode and mouse reporting
+  // // Enable raw mode and mouse reporting
   enable_raw_mode();
 
-  // printf("Click on the Sixel image. Press Ctrl+C to exit.\n");
-  image_width = kInitialWindowHeight;
-  image_height = kInitialWindowHeight;
   // mouse support
   char buf[6];
+  char ch;
+
   while (true)
   {
+    if (read(STDIN_FILENO, &buf[0], 1) < 1)
+      continue;
 
-    if (read(STDIN_FILENO, buf, 1) == 1 && buf[0] == '\033')
-    {
-      if (read(STDIN_FILENO, buf + 1, 1) == 1 && buf[1] == '[')
-      {
-        if (read(STDIN_FILENO, buf + 2, 1) == 1 && buf[2] == 'M')
-        {
-          // Read the three bytes containing mouse information
-          read(STDIN_FILENO, buf + 3, 3);
+    if (buf[0] == ESC)
+    { // Escape sequence (potential mouse or special key)
+      if (read(STDIN_FILENO, &buf[1], 1) < 1)
+        continue;
 
-          // Extract button and position info
-          int button = buf[3] - 32;
-          int col = buf[4] - 32;
-          int row = buf[5] - 32;
+      if (buf[1] == '[')
+      { // Possible mouse or arrow key
+        if (read(STDIN_FILENO, &buf[2], 1) < 1)
+          continue;
 
-          // Only process mouse click events (not movement)
-          if (button == 0)
-          { // Left click
-            // Get terminal size
-            struct winsize w;
-            ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-            // printf("winsize coordinates: %s\n", w);
-
-            // Convert to pixel coordinates
-            // int pixel_x = convert_to_pixels(col, w.ws_col, image_width);
-            // int pixel_y = convert_to_pixels(row, w.ws_row, image_height);
-
-            // printf("Pixel coordinates: x=%d, y=%d\n", pixel_x, pixel_y);
-            // updatePointer(FlutterPointerPhase::kDown, pixel_x, pixel_y);
-            // std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
-            // updatePointer(FlutterPointerPhase::kUp, pixel_x, pixel_y);
-            double pixels_per_col = w.ws_xpixel / (double)w.ws_col;
-            double pixels_per_row = w.ws_ypixel / (double)w.ws_row;
-
-            int pixel_x = (int)(col * pixels_per_col);
-            int pixel_y = (int)(row * pixels_per_row);
-
-            printf("Click at terminal cell: %d,%d\n", col, row);
-            printf("Pixel position: %d,%d\n", pixel_x, pixel_y);
-            printf("Terminal size: %dx%d cells, %dx%d pixels\n",
-                   w.ws_col, w.ws_row, w.ws_xpixel, w.ws_ypixel);
-
-            updatePointer(FlutterPointerPhase::kDown, pixel_x, pixel_y);
-            std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
-            updatePointer(FlutterPointerPhase::kUp, pixel_x, pixel_y);
-          }
+        if (buf[2] == 'M')
+        { // Mouse event
+          process_mouse_event();
+          continue;
         }
       }
     }
+    else
+    { // Regular key press
+      process_keyboard_event(buf[0]);
+      if (buf[0] == 'q')
+        break; // Exit on 'q'
+    }
   }
 
-  // while (true)
-  // {
-  //   /* code */
-
-  //   std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-  //   updatePointer(FlutterPointerPhase::kDown, 770, 570);
-  //   std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-
-  //   updatePointer(FlutterPointerPhase::kUp, 770, 570);
-  // }
-
-  // int clicks = 0;
-
-  // while (clicks < 3)
-  // {
-  //   // FlutterPointerEvent pointer_event = {};
-  //   // pointer_event.struct_size = sizeof(FlutterPointerEvent);
-  //   // pointer_event.phase = kPhaseMove;
-  //   // pointer_event.physical_x = cursor_x_position;
-  //   // pointer_event.physical_y = cursor_y_position;
-  //   // pointer_event.signal_kind = kFlutterPointerSignalKindNone;
-  //   // pointer_event.device = 0; // mouse
-
-  //   // Handle platform events (e.g., input).
-  //   // std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
-
-  //   updatePointer(FlutterPointerPhase::kDown, 770, 570);
-  //   updatePointer(FlutterPointerPhase::kUp, 770, 570);
-  //   std::cout << "Click click!" << std::endl;
-
-  //   clicks += 1;
-  // }
-
-  sixel_dither_unref(dither);
-  sixel_output_unref(output);
   reset_terminal();
   std::cout << "Hello, CMake!" << std::endl;
   return 0;
