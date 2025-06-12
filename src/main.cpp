@@ -338,6 +338,36 @@ void process_mouse_event()
 void process_keyboard_event(char ch)
 {
   printf("You pressed: %c (ASCII: %d)\n", ch, ch);
+
+  FlutterKeyEvent key_event = {};
+  key_event.struct_size = sizeof(FlutterKeyEvent);
+  key_event.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+  key_event.type = kFlutterKeyEventTypeDown;
+  key_event.physical = 32;
+
+  FlutterEngineSendKeyEvent(engine, &key_event, [](bool handled, void *user_data)
+                            {
+    if (handled) {
+        std::cout << "Key event handled by Flutter\n";
+    } else {
+        std::cout << "Key event not handled\n";
+    } }, nullptr);
+
+  FlutterKeyEvent key_event2 = {};
+  key_event2.struct_size = sizeof(FlutterKeyEvent);
+  key_event2.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now().time_since_epoch()).count();
+  key_event2.type = kFlutterKeyEventTypeUp;
+  key_event2.physical = 32;
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+  FlutterEngineSendKeyEvent(engine, &key_event, [](bool handled, void *user_data)
+                            {
+    if (handled) {
+    std::cout << "Key event handled by Flutter\n";
+    } else {
+    std::cout << "Key event not handled\n";
+    } }, nullptr);
 }
 
 int main(int argc, const char *argv[])
@@ -357,6 +387,18 @@ int main(int argc, const char *argv[])
     std::cout << "Could not run the Flutter engine." << std::endl;
     return EXIT_FAILURE;
   }
+
+  // Set up the keyboard handlers
+  // auto internal_plugin_messenger =
+  // engine.internal_plugin_registrar->messenger();
+
+  // std::vector<std::unique_ptr<KeyboardHookHandler>>
+  //     keyboard_hook_handlers;
+  // state->keyboard_hook_handlers.push_back(
+  //     std::make_unique<flutter::KeyEventHandler>(internal_plugin_messenger));
+  // state->keyboard_hook_handlers.push_back(
+  //     std::make_unique<flutter::TextInputPlugin>(internal_plugin_messenger));
+
   printf("\033[2J\033[H");
 
   // Set up signal handling
