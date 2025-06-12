@@ -4,8 +4,10 @@ This project is an example flutter software embedder which renders Flutter appli
 
 This project provides a **custom Flutter embedder** that runs Flutter engine output directly in terminals supporting sixel, allowing full Flutter UI inside a terminal window (e.g., *xterm*, *rxvt*) with sixel-enabled VTE implementations.
 
+
 [![video](https://img.youtube.com/vi/H-sHaze6DTA/0.jpg)](https://youtu.be/H-sHaze6DTA)
 
+**(Click image for video preview)**
 
 ### How to build
 
